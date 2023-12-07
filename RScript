@@ -1,0 +1,229 @@
+##############################################################
+## Analysis of flight performance 2023 by Christoph Kurze ####
+##############################################################
+
+# packages ----
+library(readr)
+library(tidyverse)
+library(lubridate)
+#####
+rm(list = ls())
+# set working directory ----
+setwd("C:/Users/LocalAdmin/Desktop/2022_Christoph/Raw_data/Raw_data_flight_mill")
+
+# Enter file name in working directory ----
+FileName = "2022_08_11_17-15-13.txt"
+# load data  ----
+dat <- read.csv(FileName, header=FALSE, sep=";")
+
+dat <- plyr::rename(dat, c("V1" = "Input", "V2"="Time_ms", "V3"="Signal"))
+dat <- dat %>%  slice(c(-1,-2,-3,-4))
+
+# start of recording 
+datetime <- strptime(c(FileName), format = "%Y_%m_%d_%H-%M-%S", tz = "UTC")
+time <- format(datetime, "%H:%M:%S")
+date <- format(datetime, "%Y-%m-%d")
+# transform time to s and sub-setting data ----
+dat2 <- dat %>% 
+  mutate(Time_s = Time_ms/1000) %>% 
+  filter(Time_ms > 30000) %>% 
+  filter(Signal == 1)
+  
+Input0 <- subset(dat2, Input == "Input0")
+      write.csv(Input0, file = "Input0.csv")
+Input1 <- subset(dat2, Input == "Input1")
+      write.csv(Input1, file = "Input1.csv")
+Input2 <- subset(dat2, Input == "Input2")
+      write.csv(Input2, file = "Input2.csv")
+Input3 <- subset(dat2, Input == "Input3")
+      write.csv(Input3, file = "Input3.csv")
+
+# creating new folder for saving results ---- 
+Path = setwd("C:/Users/LocalAdmin/Desktop/2022_Christoph/Raw_data/Raw_data_flight_mill")
+NewFolder <- substring(FileName,1, nchar(FileName)-4)
+NewPath <- file.path(Path, NewFolder)
+dir.create(substring(FileName,1, nchar(FileName)-4))
+
+# data wrangling ----
+data_files <- list.files(pattern="Input.*.csv")
+
+for (i in 1:length(data_files)) {   
+  mydata = read.csv(data_files[i], header = T) 
+  count = 1
+  # find the breaks
+  tmp = mydata %>% 
+    mutate(delta_s = order_by(Time_ms, (Time_ms - lag(Time_ms))/1000))%>%
+    mutate(Time_s = Time_ms/1000) %>%
+    filter(delta_s > 60*12) # breaks > 12min
+  # subset data depending on number of breaks
+  for (k in 1:nrow(tmp)) {
+          if (k == 0 && nrow(tmp) == 0 ) {  # no breaks
+            tmp_2 = mydata
+            tmp_2$Time_s = tmp_2$Time_s - min(tmp_2$Time_s)
+            tmp_2$Time_s = round(tmp_2$Time_s, digits = 2)
+            tmp_2 = mutate(tmp_2, Dist_m = as.numeric(rownames(tmp_2)))
+            filename = paste0("Input", i-1,"_bee_", count, ".csv")
+            write_csv(tmp_2, file.path(NewPath, filename))
+            count = count + 1
+          } else if (k == 1 && nrow(tmp) == 1 ) { # only one break
+            time_break = tmp$Time_ms[k]
+            tmp_2 = subset(mydata, mydata$Time_ms < time_break)
+            tmp_2$Time_s = tmp_2$Time_s - min(tmp_2$Time_s)
+            tmp_2$Time_s = round(tmp_2$Time_s, digits = 2)
+            tmp_2 = mutate(tmp_2, Dist_m = as.numeric(rownames(tmp_2)))
+            filename = paste0("Input", i-1,"_bee_", count, ".csv")
+            write_csv(tmp_2, file.path(NewPath, filename))
+            count = count + 1
+            tmp_2 = subset(mydata, mydata$Time_ms > time_break)
+            tmp_2$Time_s = tmp_2$Time_s - min(tmp_2$Time_s)
+            tmp_2$Time_s = round(tmp_2$Time_s, digits = 2)
+            tmp_2 = mutate(tmp_2, Dist_m = as.numeric(rownames(tmp_2)))
+            filename = paste0("Input", i-1,"_bee_", count, ".csv")
+            write_csv(tmp_2, file.path(NewPath, filename))
+            count = count + 1
+          } else if (k == 1 && nrow(tmp) > 1) { # first break of at least 2 breaks 
+            time_break = tmp$Time_ms[k]
+            tmp_2 = subset(mydata, mydata$Time_ms < time_break)
+            tmp_2$Time_s = tmp_2$Time_s - min(tmp_2$Time_s)
+            tmp_2$Time_s = round(tmp_2$Time_s, digits = 2)
+            tmp_2 = mutate(tmp_2, Dist_m = as.numeric(rownames(tmp_2)))
+                  filename = paste0("Input", i-1,"_bee_", count, ".csv")
+                  write_csv(tmp_2, file.path(NewPath, filename))
+                  count = count + 1
+          } else if (k > 1 && k < nrow(tmp) && nrow(tmp) > 1) {# within between breaks
+            down_time_break = tmp$Time_ms[k-1]
+            up_time_break = tmp$Time_ms[k]
+            tmp_2 = subset(mydata, mydata$Time_ms > down_time_break 
+                           & mydata$Time_ms < up_time_break)
+            tmp_2$Time_s = tmp_2$Time_s - min(tmp_2$Time_s)
+            tmp_2$Time_s = round(tmp_2$Time_s, digits = 2)
+            tmp_2 = mutate(tmp_2, Dist_m = as.numeric(rownames(tmp_2)))
+                  filename = paste0("Input", i-1,"_bee_", count, ".csv")
+                  write_csv(tmp_2, file.path(NewPath, filename))
+                  count = count + 1 
+          } else if (k == nrow(tmp) && nrow(tmp) > 1 ) { # for last break
+            down_time_break = tmp$Time_ms[k-1]
+            last_break = tmp$Time_ms[k]
+            tmp_2 = subset(mydata, mydata$Time_ms > down_time_break 
+                           & mydata$Time_ms < last_break)
+            tmp_2$Time_s = tmp_2$Time_s - min(tmp_2$Time_s)
+            tmp_2$Time_s = round(tmp_2$Time_s, digits = 2)
+            tmp_2 = mutate(tmp_2, Dist_m = as.numeric(rownames(tmp_2)))
+            filename = paste0("Input", i-1,"_bee_", count, ".csv")
+            write_csv(tmp_2, file.path(NewPath, filename))
+            count = count + 1 
+            tmp_2 = subset(mydata, mydata$Time_ms > last_break)
+            tmp_2$Time_s = tmp_2$Time_s - min(tmp_2$Time_s)
+            tmp_2$Time_s = round(tmp_2$Time_s, digits = 2)
+            tmp_2 = mutate(tmp_2, Dist_m = as.numeric(rownames(tmp_2)))
+                  filename = paste0("Input", i-1,"_bee_", count, ".csv")
+                  write_csv(tmp_2, file.path(NewPath, filename))
+                  count = count + 1
+          } 
+       }
+   }
+
+
+# Extracting results # Note: counted as stop if time for 1m >= 10s ----
+bee_files <- list.files(pattern="Input.*.csv", path = NewPath, full.names = TRUE)      
+
+results <- data.frame(date = integer(length(bee_files)),
+                      bee = integer(length(bee_files)),
+                      start_time = integer(length(bee_files)),
+                      distance = integer(length(bee_files)),
+                      duration = integer(length(bee_files)),
+                      avg_speed = integer(length(bee_files)), 
+                      stops = integer(length(bee_files)), 
+                      stringsAsFactors = TRUE)
+
+for (i in 1:length(bee_files)){
+  data <- if (nrow(read.csv(bee_files[i]))>3) {
+  data <- read.csv(bee_files[i])}
+  else {
+    next
+    }
+  bee0 = sub(".*Input", "", bee_files[i])
+  bee = sub("*.csv", "",bee0)
+  start_time = period_to_seconds(hms(time)) + round(data$Time_ms[1]/1000)
+  # check for number of stops > 9s
+  stops <- data %>% 
+    mutate(delta_s = order_by(Time_ms, (Time_ms - lag(Time_ms))/1000))%>% # calculate delta_s
+    filter(delta_s >= 10) %>% 
+    mutate(delta_Dist = Dist_m - lag(Dist_m))
+  # what if there are no stops >9s?
+  if(nrow(stops)<1){
+    data3 <- data %>% 
+      mutate(Time_s = Time_s - min(Time_s)) %>%
+      mutate(Dist_m = Dist_m - min(Dist_m))
+  } else{
+    #exclude first stop if < 3m after start
+    if(stops$Dist_m[1] < 3){    
+      data2 <- data %>% 
+        filter(Time_ms > stops$Time_ms[1])
+    } else{
+      data2 <- data
+    }
+    # only 4 stops with distance between stops >2m 
+    stops2 <- data2 %>% 
+      mutate(delta_s = order_by(Time_ms, (Time_ms - lag(Time_ms))/1000))%>% 
+      filter(delta_s >= 10) %>% 
+      mutate(delta_Dist = Dist_m - lag(Dist_m))
+    if (nrow(stops2)>4) {   #changed to a maximum of 4 strikes
+      data3 <- data2 %>% 
+        filter(Time_ms < stops2$Time_ms[5]) %>% # changed to max of 4 strikes
+        mutate(Time_s = Time_s - min(Time_s)) %>%
+        mutate(Dist_m = Dist_m - min(Dist_m))
+    } else {
+      data3 <- data2 %>% 
+        mutate(Time_s = Time_s - min(Time_s)) %>%
+        mutate(Dist_m = Dist_m - min(Dist_m))
+    }
+    stops3 <- data3 %>% 
+      mutate(delta_s = order_by(Time_ms, (Time_ms - lag(Time_ms))/1000))%>% 
+      filter(delta_s >= 10) %>% 
+      mutate(delta_Dist = Dist_m - lag(Dist_m))
+  }
+  # extracting results
+  distance = max(data3$Dist_m)
+  max_speed = max(data3 %>% 
+      mutate(delta_s = order_by(Time_ms, (Time_ms - lag(Time_ms))/1000))%>% 
+      mutate(speed = 1/delta_s) %>% 
+      select(speed),
+      na.rm = T )
+    
+  duration <- if(nrow(stops)<1){
+    max(data3$Time_s)
+  } else {
+    max(data3$Time_s)-sum(stops3$delta_s)
+  }
+  avg_speed <- distance/duration
+  stops <- if(nrow(stops)<1){
+    0
+  } else {
+    nrow(stops3)
+  } 
+  
+  # making a plot for each bee
+  p <- ggplot(data3, aes(Time_s, Dist_m)) +
+    geom_point() +
+    labs(title = bee,
+         x = "Time [s]",
+         y = "Distance [m]") + theme_classic()
+  ggsave(p, filename = bee, width = 5, height = 5, dpi = 300, units = "in", device='pdf', path = NewPath)
+  # storing the results 
+  results$date[i] <- date
+  results$bee[i] <- bee
+  results$start_time[i] <- start_time
+  results$distance[i] <- distance
+  results$duration[i] <- round(duration)
+  results$avg_speed[i] <- round(avg_speed, digits = 2)
+  results$max_speed[i] <- round(max_speed, digits = 2)
+  results$stops[i] <- stops
+}
+period <- seconds_to_period(results$start_time)
+results$start_time <- format(as.POSIXct(period, origin=date), format="%H:%M", tz = "UTC")
+write_csv(results, file.path(NewPath, paste(NewFolder,".csv",sep="")))
+results
+
+# Session info ----
+sessionInfo()
